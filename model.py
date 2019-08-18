@@ -15,7 +15,7 @@ class GAN:
                  ):
         """
         Args:
-          input_size：list [H, W, C]
+          image_size: [H, W, C]
           batch_size: integer, batch size
           learning_rate: float, initial learning rate for Adam
           ngf: number of gen filters in first conv layer
@@ -23,8 +23,11 @@ class GAN:
         self.learning_rate = learning_rate
         self.input_shape = [int(batch_size / 4), image_size[0], image_size[1], image_size[2]]
         self.ones = tf.ones(self.input_shape, name="ones")
+        # segment model result : label probability dict
         self.prob_list = {}
+        # encoder result dict
         self.code_list = {}
+        # Discriminator result dict
         self.judge_list = {}
         self.tensor_name = {}
 
@@ -40,6 +43,9 @@ class GAN:
 
         self.D_M = Discriminator('D_M', ngf=ngf)
 
+    """
+    Get the outline mask of the picture
+    """
     def get_mask(self, m, p=0):
         mask = 1.0 - self.ones * tf.cast(m > 0.0, dtype="float32")
         shape = m.get_shape().as_list()
@@ -47,6 +53,11 @@ class GAN:
         mask = tf.image.resize_image_with_crop_or_pad(mask, shape[1], shape[2])
         return mask
 
+    """
+    Get input image x segmentation result, and turn to ont hot vector
+    then normalize 
+    """
+    # segment the input image x, and
     def segmentation(self, x):
         l_prob = self.DC_L(self.EC_L(x))
         l_f = tf.reshape(tf.cast(tf.argmax(l_prob, axis=-1), dtype=tf.float32) * 0.25, shape=self.input_shape)
@@ -209,10 +220,9 @@ class GAN:
 
         D_loss = 0.0
         G_loss = 0.0
-        S_loss = 0.0
 
         # label supervise loss
-        S_loss += self.mse_loss(label_expand_x[:, :, :, 0],
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 0],
                                 l_f_prob_by_x[:, :, :, 0]) * 0.5 * 10 \
                   + self.mse_loss(label_expand_x[:, :, :, 1],
                                   l_f_prob_by_x[:, :, :, 1]) * 5 * 10 \
@@ -222,9 +232,9 @@ class GAN:
                                   l_f_prob_by_x[:, :, :, 3]) * 25 * 10 \
                   + self.mse_loss(label_expand_x[:, :, :, 4],
                                   l_f_prob_by_x[:, :, :, 4]) * 25 * 10
-        S_loss += self.mse_loss(l_x, l_f_by_x) * 25 * 10
+        G_loss += self.mse_loss(l_x, l_f_by_x) * 25 * 10
 
-        S_loss += self.mse_loss(label_expand_y[:, :, :, 0],
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 0],
                                 l_f_prob_by_y[:, :, :, 0]) * 0.5 * 10 \
                   + self.mse_loss(label_expand_y[:, :, :, 1],
                                   l_f_prob_by_y[:, :, :, 1]) * 5 * 10 \
@@ -234,9 +244,9 @@ class GAN:
                                   l_f_prob_by_y[:, :, :, 3]) * 25 * 10 \
                   + self.mse_loss(label_expand_y[:, :, :, 4],
                                   l_f_prob_by_y[:, :, :, 4]) * 25 * 10
-        S_loss += self.mse_loss(l_y, l_f_by_y) * 25 * 10
+        G_loss += self.mse_loss(l_y, l_f_by_y) * 25 * 10
 
-        S_loss += self.mse_loss(label_expand_z[:, :, :, 0],
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 0],
                                 l_f_prob_by_z[:, :, :, 0]) * 0.5 * 10 \
                   + self.mse_loss(label_expand_z[:, :, :, 1],
                                   l_f_prob_by_z[:, :, :, 1]) * 5 * 10 \
@@ -246,9 +256,9 @@ class GAN:
                                   l_f_prob_by_z[:, :, :, 3]) * 25 * 10 \
                   + self.mse_loss(label_expand_z[:, :, :, 4],
                                   l_f_prob_by_z[:, :, :, 4]) * 25 * 10
-        S_loss += self.mse_loss(l_z, l_f_by_z) * 25 * 10
+        G_loss += self.mse_loss(l_z, l_f_by_z) * 25 * 10
 
-        S_loss += self.mse_loss(label_expand_w[:, :, :, 0],
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 0],
                                 l_f_prob_by_w[:, :, :, 0]) * 0.5 * 10 \
                   + self.mse_loss(label_expand_w[:, :, :, 1],
                                   l_f_prob_by_w[:, :, :, 1]) * 5 * 10 \
@@ -258,7 +268,7 @@ class GAN:
                                   l_f_prob_by_w[:, :, :, 3]) * 25 * 10 \
                   + self.mse_loss(label_expand_w[:, :, :, 4],
                                   l_f_prob_by_w[:, :, :, 4]) * 25 * 10
-        S_loss += self.mse_loss(l_w, l_f_by_w) * 25 * 10
+        G_loss += self.mse_loss(l_w, l_f_by_w) * 25 * 10
 
         # contrast loss
         D_loss += self.mse_loss(j_x, 1.0) * 50 * 5
@@ -315,346 +325,346 @@ class GAN:
         G_loss += self.mse_loss(j_w_t_c_by_z, cw) * 50 * 5
 
         # label loss
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 0], l_prob_x_r[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 1], l_prob_x_r[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 2], l_prob_x_r[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 3], l_prob_x_r[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 4], l_prob_x_r[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 0], l_prob_x_r[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 1], l_prob_x_r[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 2], l_prob_x_r[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 3], l_prob_x_r[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 4], l_prob_x_r[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 0], l_prob_y_r[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 1], l_prob_y_r[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 2], l_prob_y_r[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 3], l_prob_y_r[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 4], l_prob_y_r[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 0], l_prob_y_r[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 1], l_prob_y_r[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 2], l_prob_y_r[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 3], l_prob_y_r[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 4], l_prob_y_r[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 0], l_prob_z_r[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 1], l_prob_z_r[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 2], l_prob_z_r[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 3], l_prob_z_r[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 4], l_prob_z_r[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 0], l_prob_z_r[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 1], l_prob_z_r[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 2], l_prob_z_r[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 3], l_prob_z_r[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 4], l_prob_z_r[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 0], l_prob_w_r[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 1], l_prob_w_r[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 2], l_prob_w_r[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 3], l_prob_w_r[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 4], l_prob_w_r[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 0], l_prob_w_r[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 1], l_prob_w_r[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 2], l_prob_w_r[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 3], l_prob_w_r[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 4], l_prob_w_r[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_by_x, l_x_r) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_by_y, l_y_r) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_by_z, l_z_r) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_by_w, l_w_r) * 0.5 * 50
+        G_loss += self.mse_loss(l_f_by_x, l_x_r) * 0.5
+        G_loss += self.mse_loss(l_f_by_y, l_y_r) * 0.5
+        G_loss += self.mse_loss(l_f_by_z, l_z_r) * 0.5
+        G_loss += self.mse_loss(l_f_by_w, l_w_r) * 0.5
 
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 0], l_prob_x_t_by_y[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 1], l_prob_x_t_by_y[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 2], l_prob_x_t_by_y[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 3], l_prob_x_t_by_y[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 4], l_prob_x_t_by_y[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 0], l_prob_x_t_by_y[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 1], l_prob_x_t_by_y[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 2], l_prob_x_t_by_y[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 3], l_prob_x_t_by_y[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 4], l_prob_x_t_by_y[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 0], l_prob_x_t_by_z[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 1], l_prob_x_t_by_z[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 2], l_prob_x_t_by_z[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 3], l_prob_x_t_by_z[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 4], l_prob_x_t_by_z[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 0], l_prob_x_t_by_z[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 1], l_prob_x_t_by_z[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 2], l_prob_x_t_by_z[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 3], l_prob_x_t_by_z[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 4], l_prob_x_t_by_z[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 0], l_prob_x_t_by_w[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 1], l_prob_x_t_by_w[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 2], l_prob_x_t_by_w[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 3], l_prob_x_t_by_w[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 4], l_prob_x_t_by_w[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 0], l_prob_x_t_by_w[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 1], l_prob_x_t_by_w[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 2], l_prob_x_t_by_w[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 3], l_prob_x_t_by_w[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 4], l_prob_x_t_by_w[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_by_z, l_x_t_by_z) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_by_y, l_x_t_by_y) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_by_w, l_x_t_by_w) * 0.5 * 50
+        G_loss += self.mse_loss(l_f_by_z, l_x_t_by_z) * 0.5
+        G_loss += self.mse_loss(l_f_by_y, l_x_t_by_y) * 0.5
+        G_loss += self.mse_loss(l_f_by_w, l_x_t_by_w) * 0.5
 
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 0], l_prob_y_t_by_x[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 1], l_prob_y_t_by_x[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 2], l_prob_y_t_by_x[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 3], l_prob_y_t_by_x[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 4], l_prob_y_t_by_x[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 0], l_prob_y_t_by_x[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 1], l_prob_y_t_by_x[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 2], l_prob_y_t_by_x[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 3], l_prob_y_t_by_x[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 4], l_prob_y_t_by_x[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 0], l_prob_y_t_by_z[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 1], l_prob_y_t_by_z[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 2], l_prob_y_t_by_z[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 3], l_prob_y_t_by_z[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 4], l_prob_y_t_by_z[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 0], l_prob_y_t_by_z[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 1], l_prob_y_t_by_z[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 2], l_prob_y_t_by_z[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 3], l_prob_y_t_by_z[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 4], l_prob_y_t_by_z[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 0], l_prob_y_t_by_w[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 1], l_prob_y_t_by_w[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 2], l_prob_y_t_by_w[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 3], l_prob_y_t_by_w[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 4], l_prob_y_t_by_w[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 0], l_prob_y_t_by_w[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 1], l_prob_y_t_by_w[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 2], l_prob_y_t_by_w[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 3], l_prob_y_t_by_w[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 4], l_prob_y_t_by_w[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_by_x, l_y_t_by_x) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_by_z, l_y_t_by_z) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_by_w, l_y_t_by_w) * 0.5 * 50
+        G_loss += self.mse_loss(l_f_by_x, l_y_t_by_x) * 0.5
+        G_loss += self.mse_loss(l_f_by_z, l_y_t_by_z) * 0.5
+        G_loss += self.mse_loss(l_f_by_w, l_y_t_by_w) * 0.5
 
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 0], l_prob_z_t_by_x[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 1], l_prob_z_t_by_x[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 2], l_prob_z_t_by_x[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 3], l_prob_z_t_by_x[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 4], l_prob_z_t_by_x[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 0], l_prob_z_t_by_x[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 1], l_prob_z_t_by_x[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 2], l_prob_z_t_by_x[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 3], l_prob_z_t_by_x[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 4], l_prob_z_t_by_x[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 0], l_prob_z_t_by_y[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 1], l_prob_z_t_by_y[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 2], l_prob_z_t_by_y[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 3], l_prob_z_t_by_y[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 4], l_prob_z_t_by_y[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 0], l_prob_z_t_by_y[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 1], l_prob_z_t_by_y[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 2], l_prob_z_t_by_y[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 3], l_prob_z_t_by_y[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 4], l_prob_z_t_by_y[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 0], l_prob_z_t_by_w[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 1], l_prob_z_t_by_w[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 2], l_prob_z_t_by_w[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 3], l_prob_z_t_by_w[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 4], l_prob_z_t_by_w[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 0], l_prob_z_t_by_w[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 1], l_prob_z_t_by_w[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 2], l_prob_z_t_by_w[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 3], l_prob_z_t_by_w[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 4], l_prob_z_t_by_w[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_by_x, l_z_t_by_x) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_by_y, l_z_t_by_y) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_by_w, l_z_t_by_w) * 0.5 * 50
+        G_loss += self.mse_loss(l_f_by_x, l_z_t_by_x) * 0.5
+        G_loss += self.mse_loss(l_f_by_y, l_z_t_by_y) * 0.5
+        G_loss += self.mse_loss(l_f_by_w, l_z_t_by_w) * 0.5
 
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 0], l_prob_w_t_by_x[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 1], l_prob_w_t_by_x[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 2], l_prob_w_t_by_x[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 3], l_prob_w_t_by_x[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 4], l_prob_w_t_by_x[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 0], l_prob_w_t_by_x[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 1], l_prob_w_t_by_x[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 2], l_prob_w_t_by_x[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 3], l_prob_w_t_by_x[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 4], l_prob_w_t_by_x[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 0], l_prob_w_t_by_y[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 1], l_prob_w_t_by_y[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 2], l_prob_w_t_by_y[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 3], l_prob_w_t_by_y[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 4], l_prob_w_t_by_y[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 0], l_prob_w_t_by_y[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 1], l_prob_w_t_by_y[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 2], l_prob_w_t_by_y[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 3], l_prob_w_t_by_y[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 4], l_prob_w_t_by_y[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 0], l_prob_w_t_by_z[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 1], l_prob_w_t_by_z[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 2], l_prob_w_t_by_z[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 3], l_prob_w_t_by_z[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 4], l_prob_w_t_by_z[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 0], l_prob_w_t_by_z[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 1], l_prob_w_t_by_z[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 2], l_prob_w_t_by_z[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 3], l_prob_w_t_by_z[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 4], l_prob_w_t_by_z[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_f_by_x, l_w_t_by_x) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_by_y, l_w_t_by_y) * 0.5 * 50
-        G_loss += self.mse_loss(l_f_by_z, l_w_t_by_z) * 0.5 * 50
+        G_loss += self.mse_loss(l_f_by_x, l_w_t_by_x) * 0.5
+        G_loss += self.mse_loss(l_f_by_y, l_w_t_by_y) * 0.5
+        G_loss += self.mse_loss(l_f_by_z, l_w_t_by_z) * 0.5
 
         # label supervise loss
-        G_loss += self.mse_loss(label_expand_y[:, :, :, 0], l_prob_x_t_by_y[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(label_expand_y[:, :, :, 1], l_prob_x_t_by_y[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(label_expand_y[:, :, :, 2], l_prob_x_t_by_y[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_y[:, :, :, 3], l_prob_x_t_by_y[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_y[:, :, :, 4], l_prob_x_t_by_y[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 0], l_prob_x_t_by_y[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 1], l_prob_x_t_by_y[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 2], l_prob_x_t_by_y[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 3], l_prob_x_t_by_y[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 4], l_prob_x_t_by_y[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(label_expand_z[:, :, :, 0], l_prob_x_t_by_z[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(label_expand_z[:, :, :, 1], l_prob_x_t_by_z[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(label_expand_z[:, :, :, 2], l_prob_x_t_by_z[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_z[:, :, :, 3], l_prob_x_t_by_z[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_z[:, :, :, 4], l_prob_x_t_by_z[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 0], l_prob_x_t_by_z[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 1], l_prob_x_t_by_z[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 2], l_prob_x_t_by_z[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 3], l_prob_x_t_by_z[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 4], l_prob_x_t_by_z[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(label_expand_w[:, :, :, 0], l_prob_x_t_by_w[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(label_expand_w[:, :, :, 1], l_prob_x_t_by_w[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(label_expand_w[:, :, :, 2], l_prob_x_t_by_w[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_w[:, :, :, 3], l_prob_x_t_by_w[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_w[:, :, :, 4], l_prob_x_t_by_w[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 0], l_prob_x_t_by_w[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 1], l_prob_x_t_by_w[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 2], l_prob_x_t_by_w[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 3], l_prob_x_t_by_w[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 4], l_prob_x_t_by_w[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_z, l_x_t_by_z) * 0.5 * 50
-        G_loss += self.mse_loss(l_y, l_x_t_by_y) * 0.5 * 50
-        G_loss += self.mse_loss(l_w, l_x_t_by_w) * 0.5 * 50
+        G_loss += self.mse_loss(l_z, l_x_t_by_z) * 0.5
+        G_loss += self.mse_loss(l_y, l_x_t_by_y) * 0.5
+        G_loss += self.mse_loss(l_w, l_x_t_by_w) * 0.5
 
-        G_loss += self.mse_loss(label_expand_x[:, :, :, 0], l_prob_y_t_by_x[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(label_expand_x[:, :, :, 1], l_prob_y_t_by_x[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(label_expand_x[:, :, :, 2], l_prob_y_t_by_x[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_x[:, :, :, 3], l_prob_y_t_by_x[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_x[:, :, :, 4], l_prob_y_t_by_x[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 0], l_prob_y_t_by_x[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 1], l_prob_y_t_by_x[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 2], l_prob_y_t_by_x[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 3], l_prob_y_t_by_x[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 4], l_prob_y_t_by_x[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(label_expand_z[:, :, :, 0], l_prob_y_t_by_z[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(label_expand_z[:, :, :, 1], l_prob_y_t_by_z[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(label_expand_z[:, :, :, 2], l_prob_y_t_by_z[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_z[:, :, :, 3], l_prob_y_t_by_z[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_z[:, :, :, 4], l_prob_y_t_by_z[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 0], l_prob_y_t_by_z[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 1], l_prob_y_t_by_z[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 2], l_prob_y_t_by_z[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 3], l_prob_y_t_by_z[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 4], l_prob_y_t_by_z[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(label_expand_w[:, :, :, 0], l_prob_y_t_by_w[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(label_expand_w[:, :, :, 1], l_prob_y_t_by_w[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(label_expand_w[:, :, :, 2], l_prob_y_t_by_w[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_w[:, :, :, 3], l_prob_y_t_by_w[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_w[:, :, :, 4], l_prob_y_t_by_w[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 0], l_prob_y_t_by_w[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 1], l_prob_y_t_by_w[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 2], l_prob_y_t_by_w[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 3], l_prob_y_t_by_w[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 4], l_prob_y_t_by_w[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_x, l_y_t_by_x) * 0.5 * 50
-        G_loss += self.mse_loss(l_z, l_y_t_by_z) * 0.5 * 50
-        G_loss += self.mse_loss(l_w, l_y_t_by_w) * 0.5 * 50
+        G_loss += self.mse_loss(l_x, l_y_t_by_x) * 0.5
+        G_loss += self.mse_loss(l_z, l_y_t_by_z) * 0.5
+        G_loss += self.mse_loss(l_w, l_y_t_by_w) * 0.5
 
-        G_loss += self.mse_loss(label_expand_x[:, :, :, 0], l_prob_z_t_by_x[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(label_expand_x[:, :, :, 1], l_prob_z_t_by_x[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(label_expand_x[:, :, :, 2], l_prob_z_t_by_x[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_x[:, :, :, 3], l_prob_z_t_by_x[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_x[:, :, :, 4], l_prob_z_t_by_x[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 0], l_prob_z_t_by_x[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 1], l_prob_z_t_by_x[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 2], l_prob_z_t_by_x[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 3], l_prob_z_t_by_x[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 4], l_prob_z_t_by_x[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(label_expand_y[:, :, :, 0], l_prob_z_t_by_y[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(label_expand_y[:, :, :, 1], l_prob_z_t_by_y[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(label_expand_y[:, :, :, 2], l_prob_z_t_by_y[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_y[:, :, :, 3], l_prob_z_t_by_y[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_y[:, :, :, 4], l_prob_z_t_by_y[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 0], l_prob_z_t_by_y[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 1], l_prob_z_t_by_y[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 2], l_prob_z_t_by_y[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 3], l_prob_z_t_by_y[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 4], l_prob_z_t_by_y[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(label_expand_w[:, :, :, 0], l_prob_z_t_by_w[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(label_expand_w[:, :, :, 1], l_prob_z_t_by_w[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(label_expand_w[:, :, :, 2], l_prob_z_t_by_w[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_w[:, :, :, 3], l_prob_z_t_by_w[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_w[:, :, :, 4], l_prob_z_t_by_w[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 0], l_prob_z_t_by_w[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 1], l_prob_z_t_by_w[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 2], l_prob_z_t_by_w[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 3], l_prob_z_t_by_w[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(label_expand_w[:, :, :, 4], l_prob_z_t_by_w[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_x, l_z_t_by_x) * 0.5 * 50
-        G_loss += self.mse_loss(l_y, l_z_t_by_y) * 0.5 * 50
-        G_loss += self.mse_loss(l_w, l_z_t_by_w) * 0.5 * 50
+        G_loss += self.mse_loss(l_x, l_z_t_by_x) * 0.5
+        G_loss += self.mse_loss(l_y, l_z_t_by_y) * 0.5
+        G_loss += self.mse_loss(l_w, l_z_t_by_w) * 0.5
 
-        G_loss += self.mse_loss(label_expand_x[:, :, :, 0], l_prob_w_t_by_x[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(label_expand_x[:, :, :, 1], l_prob_w_t_by_x[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(label_expand_x[:, :, :, 2], l_prob_w_t_by_x[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_x[:, :, :, 3], l_prob_w_t_by_x[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_x[:, :, :, 4], l_prob_w_t_by_x[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 0], l_prob_w_t_by_x[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 1], l_prob_w_t_by_x[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 2], l_prob_w_t_by_x[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 3], l_prob_w_t_by_x[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(label_expand_x[:, :, :, 4], l_prob_w_t_by_x[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(label_expand_y[:, :, :, 0], l_prob_w_t_by_y[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(label_expand_y[:, :, :, 1], l_prob_w_t_by_y[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(label_expand_y[:, :, :, 2], l_prob_w_t_by_y[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_y[:, :, :, 3], l_prob_w_t_by_y[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_y[:, :, :, 4], l_prob_w_t_by_y[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 0], l_prob_w_t_by_y[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 1], l_prob_w_t_by_y[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 2], l_prob_w_t_by_y[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 3], l_prob_w_t_by_y[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(label_expand_y[:, :, :, 4], l_prob_w_t_by_y[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(label_expand_z[:, :, :, 0], l_prob_w_t_by_z[:, :, :, 0]) * 0.5 * 50
-        G_loss += self.mse_loss(label_expand_z[:, :, :, 1], l_prob_w_t_by_z[:, :, :, 1]) * 1 * 50
-        G_loss += self.mse_loss(label_expand_z[:, :, :, 2], l_prob_w_t_by_z[:, :, :, 2]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_z[:, :, :, 3], l_prob_w_t_by_z[:, :, :, 3]) * 5 * 50
-        G_loss += self.mse_loss(label_expand_z[:, :, :, 4], l_prob_w_t_by_z[:, :, :, 4]) * 5 * 50
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 0], l_prob_w_t_by_z[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 1], l_prob_w_t_by_z[:, :, :, 1]) * 1
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 2], l_prob_w_t_by_z[:, :, :, 2]) * 5
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 3], l_prob_w_t_by_z[:, :, :, 3]) * 5
+        G_loss += self.mse_loss(label_expand_z[:, :, :, 4], l_prob_w_t_by_z[:, :, :, 4]) * 5
 
-        G_loss += self.mse_loss(l_x, l_w_t_by_x) * 0.5 * 50
-        G_loss += self.mse_loss(l_y, l_w_t_by_y) * 0.5 * 50
-        G_loss += self.mse_loss(l_z, l_w_t_by_z) * 0.5 * 50
+        G_loss += self.mse_loss(l_x, l_w_t_by_x) * 0.5
+        G_loss += self.mse_loss(l_y, l_w_t_by_y) * 0.5
+        G_loss += self.mse_loss(l_z, l_w_t_by_z) * 0.5
 
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 0], l_prob_x_r_c_by_y[:, :, :, 0]) * 0.5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 1], l_prob_x_r_c_by_y[:, :, :, 1]) * 5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 2], l_prob_x_r_c_by_y[:, :, :, 2]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 3], l_prob_x_r_c_by_y[:, :, :, 3]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 4], l_prob_x_r_c_by_y[:, :, :, 4]) * 25 * 1
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 0], l_prob_x_r_c_by_y[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 1], l_prob_x_r_c_by_y[:, :, :, 1]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 2], l_prob_x_r_c_by_y[:, :, :, 2]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 3], l_prob_x_r_c_by_y[:, :, :, 3]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 4], l_prob_x_r_c_by_y[:, :, :, 4]) * 25
 
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 0], l_prob_x_r_c_by_z[:, :, :, 0]) * 0.5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 1], l_prob_x_r_c_by_z[:, :, :, 1]) * 5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 2], l_prob_x_r_c_by_z[:, :, :, 2]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 3], l_prob_x_r_c_by_z[:, :, :, 3]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 4], l_prob_x_r_c_by_z[:, :, :, 4]) * 25 * 1
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 0], l_prob_x_r_c_by_z[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 1], l_prob_x_r_c_by_z[:, :, :, 1]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 2], l_prob_x_r_c_by_z[:, :, :, 2]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 3], l_prob_x_r_c_by_z[:, :, :, 3]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 4], l_prob_x_r_c_by_z[:, :, :, 4]) * 25
 
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 0], l_prob_x_r_c_by_w[:, :, :, 0]) * 0.5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 1], l_prob_x_r_c_by_w[:, :, :, 1]) * 1 * 1
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 2], l_prob_x_r_c_by_w[:, :, :, 2]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 3], l_prob_x_r_c_by_w[:, :, :, 3]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 4], l_prob_x_r_c_by_w[:, :, :, 4]) * 25 * 1
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 0], l_prob_x_r_c_by_w[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 1], l_prob_x_r_c_by_w[:, :, :, 1]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 2], l_prob_x_r_c_by_w[:, :, :, 2]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 3], l_prob_x_r_c_by_w[:, :, :, 3]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_x[:, :, :, 4], l_prob_x_r_c_by_w[:, :, :, 4]) * 25
 
-        G_loss += self.mse_loss(l_f_by_x, l_x_r_c_by_z) * 1 * 10
-        G_loss += self.mse_loss(l_f_by_x, l_x_r_c_by_y) * 1 * 10
-        G_loss += self.mse_loss(l_f_by_x, l_x_r_c_by_w) * 1 * 10
+        G_loss += self.mse_loss(l_f_by_x, l_x_r_c_by_z) * 5
+        G_loss += self.mse_loss(l_f_by_x, l_x_r_c_by_y) * 5
+        G_loss += self.mse_loss(l_f_by_x, l_x_r_c_by_w) * 5
         G_loss += self.mse_loss(l_x_r_c_by_z, l_x_r_c_by_y) * 0.5
-        G_loss += self.mse_loss(l_x_r_c_by_z, l_x_r_c_by_w) * 0.5 * 10
-        G_loss += self.mse_loss(l_x_r_c_by_y, l_x_r_c_by_w) * 0.5 * 10
+        G_loss += self.mse_loss(l_x_r_c_by_z, l_x_r_c_by_w) * 0.5
+        G_loss += self.mse_loss(l_x_r_c_by_y, l_x_r_c_by_w) * 0.5
 
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 0], l_prob_y_r_c_by_x[:, :, :, 0]) * 0.5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 1], l_prob_y_r_c_by_x[:, :, :, 1]) * 5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 2], l_prob_y_r_c_by_x[:, :, :, 2]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 3], l_prob_y_r_c_by_x[:, :, :, 3]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 4], l_prob_y_r_c_by_x[:, :, :, 4]) * 25 * 1
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 0], l_prob_y_r_c_by_x[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 1], l_prob_y_r_c_by_x[:, :, :, 1]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 2], l_prob_y_r_c_by_x[:, :, :, 2]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 3], l_prob_y_r_c_by_x[:, :, :, 3]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 4], l_prob_y_r_c_by_x[:, :, :, 4]) * 25
 
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 0], l_prob_y_r_c_by_z[:, :, :, 0]) * 0.5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 1], l_prob_y_r_c_by_z[:, :, :, 1]) * 5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 2], l_prob_y_r_c_by_z[:, :, :, 2]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 3], l_prob_y_r_c_by_z[:, :, :, 3]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 4], l_prob_y_r_c_by_z[:, :, :, 4]) * 25 * 1
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 0], l_prob_y_r_c_by_z[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 1], l_prob_y_r_c_by_z[:, :, :, 1]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 2], l_prob_y_r_c_by_z[:, :, :, 2]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 3], l_prob_y_r_c_by_z[:, :, :, 3]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 4], l_prob_y_r_c_by_z[:, :, :, 4]) * 25
 
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 0], l_prob_y_r_c_by_w[:, :, :, 0]) * 0.5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 1], l_prob_y_r_c_by_w[:, :, :, 1]) * 5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 2], l_prob_y_r_c_by_w[:, :, :, 2]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 3], l_prob_y_r_c_by_w[:, :, :, 3]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 4], l_prob_y_r_c_by_w[:, :, :, 4]) * 25 * 1
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 0], l_prob_y_r_c_by_w[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 1], l_prob_y_r_c_by_w[:, :, :, 1]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 2], l_prob_y_r_c_by_w[:, :, :, 2]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 3], l_prob_y_r_c_by_w[:, :, :, 3]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_y[:, :, :, 4], l_prob_y_r_c_by_w[:, :, :, 4]) * 25
 
-        G_loss += self.mse_loss(l_f_by_y, l_y_r_c_by_x) * 5 * 1
-        G_loss += self.mse_loss(l_f_by_y, l_y_r_c_by_z) * 5 * 1
-        G_loss += self.mse_loss(l_f_by_y, l_y_r_c_by_w) * 5 * 1
-        G_loss += self.mse_loss(l_y_r_c_by_x, l_y_r_c_by_z) * 0.5 * 1
-        G_loss += self.mse_loss(l_y_r_c_by_x, l_y_r_c_by_w) * 0.5 * 1
-        G_loss += self.mse_loss(l_y_r_c_by_z, l_y_r_c_by_w) * 0.5 * 1
+        G_loss += self.mse_loss(l_f_by_y, l_y_r_c_by_x) * 5
+        G_loss += self.mse_loss(l_f_by_y, l_y_r_c_by_z) * 5
+        G_loss += self.mse_loss(l_f_by_y, l_y_r_c_by_w) * 5
+        G_loss += self.mse_loss(l_y_r_c_by_x, l_y_r_c_by_z) * 0.5
+        G_loss += self.mse_loss(l_y_r_c_by_x, l_y_r_c_by_w) * 0.5
+        G_loss += self.mse_loss(l_y_r_c_by_z, l_y_r_c_by_w) * 0.5
 
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 0], l_prob_z_r_c_by_x[:, :, :, 0]) * 0.5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 1], l_prob_z_r_c_by_x[:, :, :, 1]) * 5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 2], l_prob_z_r_c_by_x[:, :, :, 2]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 3], l_prob_z_r_c_by_x[:, :, :, 3]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 4], l_prob_z_r_c_by_x[:, :, :, 4]) * 25 * 1
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 0], l_prob_z_r_c_by_x[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 1], l_prob_z_r_c_by_x[:, :, :, 1]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 2], l_prob_z_r_c_by_x[:, :, :, 2]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 3], l_prob_z_r_c_by_x[:, :, :, 3]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 4], l_prob_z_r_c_by_x[:, :, :, 4]) * 25
 
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 0], l_prob_z_r_c_by_y[:, :, :, 0]) * 0.5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 1], l_prob_z_r_c_by_y[:, :, :, 1]) * 5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 2], l_prob_z_r_c_by_y[:, :, :, 2]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 3], l_prob_z_r_c_by_y[:, :, :, 3]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 4], l_prob_z_r_c_by_y[:, :, :, 4]) * 25 * 1
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 0], l_prob_z_r_c_by_y[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 1], l_prob_z_r_c_by_y[:, :, :, 1]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 2], l_prob_z_r_c_by_y[:, :, :, 2]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 3], l_prob_z_r_c_by_y[:, :, :, 3]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 4], l_prob_z_r_c_by_y[:, :, :, 4]) * 25
 
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 0], l_prob_z_r_c_by_w[:, :, :, 0]) * 0.5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 1], l_prob_z_r_c_by_w[:, :, :, 1]) * 5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 2], l_prob_z_r_c_by_w[:, :, :, 2]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 3], l_prob_z_r_c_by_w[:, :, :, 3]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 4], l_prob_z_r_c_by_w[:, :, :, 4]) * 25 * 1
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 0], l_prob_z_r_c_by_w[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 1], l_prob_z_r_c_by_w[:, :, :, 1]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 2], l_prob_z_r_c_by_w[:, :, :, 2]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 3], l_prob_z_r_c_by_w[:, :, :, 3]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_z[:, :, :, 4], l_prob_z_r_c_by_w[:, :, :, 4]) * 25
 
-        G_loss += self.mse_loss(l_f_by_z, l_z_r_c_by_x) * 5 * 1
-        G_loss += self.mse_loss(l_f_by_z, l_z_r_c_by_y) * 5 * 1
-        G_loss += self.mse_loss(l_f_by_z, l_z_r_c_by_w) * 5 * 1
-        G_loss += self.mse_loss(l_z_r_c_by_x, l_z_r_c_by_y) * 0.5 * 1
-        G_loss += self.mse_loss(l_z_r_c_by_x, l_z_r_c_by_w) * 0.5 * 1
-        G_loss += self.mse_loss(l_z_r_c_by_y, l_z_r_c_by_w) * 0.5 * 1
+        G_loss += self.mse_loss(l_f_by_z, l_z_r_c_by_x) * 5
+        G_loss += self.mse_loss(l_f_by_z, l_z_r_c_by_y) * 5
+        G_loss += self.mse_loss(l_f_by_z, l_z_r_c_by_w) * 5
+        G_loss += self.mse_loss(l_z_r_c_by_x, l_z_r_c_by_y) * 0.5
+        G_loss += self.mse_loss(l_z_r_c_by_x, l_z_r_c_by_w) * 0.5
+        G_loss += self.mse_loss(l_z_r_c_by_y, l_z_r_c_by_w) * 0.5
 
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 0], l_prob_w_r_c_by_x[:, :, :, 0]) * 0.5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 1], l_prob_w_r_c_by_x[:, :, :, 1]) * 5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 2], l_prob_w_r_c_by_x[:, :, :, 2]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 3], l_prob_w_r_c_by_x[:, :, :, 3]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 4], l_prob_w_r_c_by_x[:, :, :, 4]) * 25 * 1
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 0], l_prob_w_r_c_by_x[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 1], l_prob_w_r_c_by_x[:, :, :, 1]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 2], l_prob_w_r_c_by_x[:, :, :, 2]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 3], l_prob_w_r_c_by_x[:, :, :, 3]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 4], l_prob_w_r_c_by_x[:, :, :, 4]) * 25
 
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 0], l_prob_w_r_c_by_y[:, :, :, 0]) * 0.5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 1], l_prob_w_r_c_by_y[:, :, :, 1]) * 5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 2], l_prob_w_r_c_by_y[:, :, :, 2]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 3], l_prob_w_r_c_by_y[:, :, :, 3]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 4], l_prob_w_r_c_by_y[:, :, :, 4]) * 25 * 1
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 0], l_prob_w_r_c_by_y[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 1], l_prob_w_r_c_by_y[:, :, :, 1]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 2], l_prob_w_r_c_by_y[:, :, :, 2]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 3], l_prob_w_r_c_by_y[:, :, :, 3]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 4], l_prob_w_r_c_by_y[:, :, :, 4]) * 25
 
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 0], l_prob_w_r_c_by_z[:, :, :, 0]) * 0.5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 1], l_prob_w_r_c_by_z[:, :, :, 1]) * 5 * 1
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 2], l_prob_w_r_c_by_z[:, :, :, 2]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 3], l_prob_w_r_c_by_z[:, :, :, 3]) * 25 * 1
-        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 4], l_prob_w_r_c_by_z[:, :, :, 4]) * 25 * 1
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 0], l_prob_w_r_c_by_z[:, :, :, 0]) * 0.5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 1], l_prob_w_r_c_by_z[:, :, :, 1]) * 5
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 2], l_prob_w_r_c_by_z[:, :, :, 2]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 3], l_prob_w_r_c_by_z[:, :, :, 3]) * 25
+        G_loss += self.mse_loss(l_f_prob_by_w[:, :, :, 4], l_prob_w_r_c_by_z[:, :, :, 4]) * 25
 
-        G_loss += self.mse_loss(l_f_by_w, l_w_r_c_by_x) * 5 * 1
-        G_loss += self.mse_loss(l_f_by_w, l_w_r_c_by_y) * 5 * 1
-        G_loss += self.mse_loss(l_f_by_w, l_w_r_c_by_z) * 5 * 1
-        G_loss += self.mse_loss(l_w_r_c_by_x, l_w_r_c_by_y) * 0.5 * 1
-        G_loss += self.mse_loss(l_w_r_c_by_x, l_w_r_c_by_z) * 0.5 * 1
-        G_loss += self.mse_loss(l_w_r_c_by_y, l_w_r_c_by_z) * 0.5 * 1
+        G_loss += self.mse_loss(l_f_by_w, l_w_r_c_by_x) * 5
+        G_loss += self.mse_loss(l_f_by_w, l_w_r_c_by_y) * 5
+        G_loss += self.mse_loss(l_f_by_w, l_w_r_c_by_z) * 5
+        G_loss += self.mse_loss(l_w_r_c_by_x, l_w_r_c_by_y) * 0.5
+        G_loss += self.mse_loss(l_w_r_c_by_x, l_w_r_c_by_z) * 0.5
+        G_loss += self.mse_loss(l_w_r_c_by_y, l_w_r_c_by_z) * 0.5
 
         # self supervise loss between rebuild and original image
-        G_loss += self.mse_loss(x, x_r) * 5 * 0.01
-        G_loss += self.mse_loss(y, y_r) * 5 * 0.01
-        G_loss += self.mse_loss(z, z_r) * 5 * 0.01
-        G_loss += self.mse_loss(w, w_r) * 5 * 0.01
+        G_loss += self.mse_loss(x, x_r) * 5
+        G_loss += self.mse_loss(y, y_r) * 5
+        G_loss += self.mse_loss(z, z_r) * 5
+        G_loss += self.mse_loss(w, w_r) * 5
 
         # self supervise loss between cycle rebuild and original image
-        G_loss += self.mse_loss(x, x_r_c_by_y) * 10 * 0.01
-        G_loss += self.mse_loss(x, x_r_c_by_z) * 10 * 0.01
-        G_loss += self.mse_loss(x, x_r_c_by_w) * 10 * 0.01
-        G_loss += self.mse_loss(x_r_c_by_y, x_r_c_by_z) * 2 * 0.01
-        G_loss += self.mse_loss(x_r_c_by_y, x_r_c_by_w) * 2 * 0.01
-        G_loss += self.mse_loss(x_r_c_by_z, x_r_c_by_w) * 2 * 0.01
+        G_loss += self.mse_loss(x, x_r_c_by_y) * 10
+        G_loss += self.mse_loss(x, x_r_c_by_z) * 10
+        G_loss += self.mse_loss(x, x_r_c_by_w) * 10
+        G_loss += self.mse_loss(x_r_c_by_y, x_r_c_by_z) * 2
+        G_loss += self.mse_loss(x_r_c_by_y, x_r_c_by_w) * 2
+        G_loss += self.mse_loss(x_r_c_by_z, x_r_c_by_w) * 2
 
-        G_loss += self.mse_loss(y, y_r_c_by_x) * 10 * 0.01
-        G_loss += self.mse_loss(y, y_r_c_by_z) * 10 * 0.01
-        G_loss += self.mse_loss(y, y_r_c_by_w) * 10 * 0.01
-        G_loss += self.mse_loss(y_r_c_by_x, y_r_c_by_z) * 2 * 0.01
-        G_loss += self.mse_loss(y_r_c_by_x, y_r_c_by_w) * 2 * 0.01
-        G_loss += self.mse_loss(y_r_c_by_z, y_r_c_by_w) * 2 * 0.01
+        G_loss += self.mse_loss(y, y_r_c_by_x) * 10
+        G_loss += self.mse_loss(y, y_r_c_by_z) * 10
+        G_loss += self.mse_loss(y, y_r_c_by_w) * 10
+        G_loss += self.mse_loss(y_r_c_by_x, y_r_c_by_z) * 2
+        G_loss += self.mse_loss(y_r_c_by_x, y_r_c_by_w) * 2
+        G_loss += self.mse_loss(y_r_c_by_z, y_r_c_by_w) * 2
 
-        G_loss += self.mse_loss(z, z_r_c_by_x) * 10 * 0.01
-        G_loss += self.mse_loss(z, z_r_c_by_y) * 10 * 0.01
-        G_loss += self.mse_loss(z, z_r_c_by_w) * 10 * 0.01
-        G_loss += self.mse_loss(z_r_c_by_x, z_r_c_by_y) * 2 * 0.01
-        G_loss += self.mse_loss(z_r_c_by_x, z_r_c_by_w) * 2 * 0.01
-        G_loss += self.mse_loss(z_r_c_by_y, z_r_c_by_w) * 2 * 0.01
+        G_loss += self.mse_loss(z, z_r_c_by_x) * 10
+        G_loss += self.mse_loss(z, z_r_c_by_y) * 10
+        G_loss += self.mse_loss(z, z_r_c_by_w) * 10
+        G_loss += self.mse_loss(z_r_c_by_x, z_r_c_by_y) * 2
+        G_loss += self.mse_loss(z_r_c_by_x, z_r_c_by_w) * 2
+        G_loss += self.mse_loss(z_r_c_by_y, z_r_c_by_w) * 2
 
-        G_loss += self.mse_loss(w, w_r_c_by_x) * 10 * 0.01
-        G_loss += self.mse_loss(w, w_r_c_by_y) * 10 * 0.01
-        G_loss += self.mse_loss(w, w_r_c_by_z) * 10 * 0.01
-        G_loss += self.mse_loss(w_r_c_by_x, w_r_c_by_y) * 2 * 0.01
-        G_loss += self.mse_loss(w_r_c_by_x, w_r_c_by_z) * 2 * 0.01
-        G_loss += self.mse_loss(w_r_c_by_y, w_r_c_by_z) * 2 * 0.01
+        G_loss += self.mse_loss(w, w_r_c_by_x) * 10
+        G_loss += self.mse_loss(w, w_r_c_by_y) * 10
+        G_loss += self.mse_loss(w, w_r_c_by_z) * 10
+        G_loss += self.mse_loss(w_r_c_by_x, w_r_c_by_y) * 2
+        G_loss += self.mse_loss(w_r_c_by_x, w_r_c_by_z) * 2
+        G_loss += self.mse_loss(w_r_c_by_y, w_r_c_by_z) * 2
 
         # self supervise loss between cycle rebuild and original image
         G_loss += self.mse_loss(0.0, x_t_by_y * mask_y) * 5
@@ -673,73 +683,75 @@ class GAN:
         G_loss += self.mse_loss(0.0, w_t_by_y * mask_y) * 5
         G_loss += self.mse_loss(0.0, w_t_by_z * mask_z) * 5
 
-        G_loss += self.mse_loss(0.0, x_r * mask_x) * 0.5 * 0.01
-        G_loss += self.mse_loss(0.0, y_r * mask_y) * 0.5 * 0.01
-        G_loss += self.mse_loss(0.0, z_r * mask_z) * 0.5 * 0.01
-        G_loss += self.mse_loss(0.0, w_r * mask_w) * 0.5 * 0.01
+        G_loss += self.mse_loss(0.0, x_r * mask_x) * 0.5
+        G_loss += self.mse_loss(0.0, y_r * mask_y) * 0.5
+        G_loss += self.mse_loss(0.0, z_r * mask_z) * 0.5
+        G_loss += self.mse_loss(0.0, w_r * mask_w) * 0.5
 
         # code loss
-        G_loss += self.mse_loss(code_x, code_y_t_by_x) * 5 * 0.01
-        G_loss += self.mse_loss(code_x, code_z_t_by_x) * 5 * 0.01
-        G_loss += self.mse_loss(code_x, code_w_t_by_x) * 5 * 0.01
-        G_loss += self.mse_loss(code_y_t_by_x, code_z_t_by_x) * 0.01
-        G_loss += self.mse_loss(code_y_t_by_x, code_w_t_by_x) * 0.01
-        G_loss += self.mse_loss(code_z_t_by_x, code_w_t_by_x) * 0.01
+        G_loss += self.mse_loss(code_x, code_y_t_by_x) * 5
+        G_loss += self.mse_loss(code_x, code_z_t_by_x) * 5
+        G_loss += self.mse_loss(code_x, code_w_t_by_x) * 5
+        G_loss += self.mse_loss(code_y_t_by_x, code_z_t_by_x)
+        G_loss += self.mse_loss(code_y_t_by_x, code_w_t_by_x)
+        G_loss += self.mse_loss(code_z_t_by_x, code_w_t_by_x)
 
-        G_loss += self.mse_loss(code_y, code_x_t_by_y) * 5 * 0.01
-        G_loss += self.mse_loss(code_y, code_z_t_by_y) * 5 * 0.01
-        G_loss += self.mse_loss(code_y, code_w_t_by_y) * 5 * 0.01
-        G_loss += self.mse_loss(code_x_t_by_y, code_z_t_by_y) * 0.01
-        G_loss += self.mse_loss(code_x_t_by_y, code_w_t_by_y) * 0.01
-        G_loss += self.mse_loss(code_z_t_by_y, code_w_t_by_y) * 0.01
+        G_loss += self.mse_loss(code_y, code_x_t_by_y) * 5
+        G_loss += self.mse_loss(code_y, code_z_t_by_y) * 5
+        G_loss += self.mse_loss(code_y, code_w_t_by_y) * 5
+        G_loss += self.mse_loss(code_x_t_by_y, code_z_t_by_y)
+        G_loss += self.mse_loss(code_x_t_by_y, code_w_t_by_y)
+        G_loss += self.mse_loss(code_z_t_by_y, code_w_t_by_y)
 
-        G_loss += self.mse_loss(code_z, code_x_t_by_z) * 5 * 0.01
-        G_loss += self.mse_loss(code_z, code_y_t_by_z) * 5 * 0.01
-        G_loss += self.mse_loss(code_z, code_w_t_by_z) * 5 * 0.01
-        G_loss += self.mse_loss(code_x_t_by_z, code_y_t_by_z) * 0.01
-        G_loss += self.mse_loss(code_x_t_by_z, code_w_t_by_z) * 0.01
-        G_loss += self.mse_loss(code_y_t_by_z, code_w_t_by_z) * 0.01
+        G_loss += self.mse_loss(code_z, code_x_t_by_z) * 5
+        G_loss += self.mse_loss(code_z, code_y_t_by_z) * 5
+        G_loss += self.mse_loss(code_z, code_w_t_by_z) * 5
+        G_loss += self.mse_loss(code_x_t_by_z, code_y_t_by_z)
+        G_loss += self.mse_loss(code_x_t_by_z, code_w_t_by_z)
+        G_loss += self.mse_loss(code_y_t_by_z, code_w_t_by_z)
 
-        G_loss += self.mse_loss(code_w, code_x_t_by_w) * 5 * 0.01
-        G_loss += self.mse_loss(code_w, code_y_t_by_w) * 5 * 0.01
-        G_loss += self.mse_loss(code_w, code_z_t_by_w) * 5 * 0.01
-        G_loss += self.mse_loss(code_x_t_by_w, code_y_t_by_w) * 0.01
-        G_loss += self.mse_loss(code_x_t_by_w, code_z_t_by_w) * 0.01
-        G_loss += self.mse_loss(code_y_t_by_w, code_z_t_by_w) * 0.01
+        G_loss += self.mse_loss(code_w, code_x_t_by_w) * 5
+        G_loss += self.mse_loss(code_w, code_y_t_by_w) * 5
+        G_loss += self.mse_loss(code_w, code_z_t_by_w) * 5
+        G_loss += self.mse_loss(code_x_t_by_w, code_y_t_by_w)
+        G_loss += self.mse_loss(code_x_t_by_w, code_z_t_by_w)
+        G_loss += self.mse_loss(code_y_t_by_w, code_z_t_by_w)
 
         # sobel loss
-        G_loss += self.sobel_loss(x, x_r_c_by_y) * 10 * 0.01
-        G_loss += self.sobel_loss(x, x_r_c_by_z) * 10 * 0.01
-        G_loss += self.sobel_loss(x, x_r_c_by_w) * 10 * 0.01
 
-        G_loss += self.sobel_loss(y, y_r_c_by_x) * 10 * 0.01
-        G_loss += self.sobel_loss(y, y_r_c_by_z) * 10 * 0.01
-        G_loss += self.sobel_loss(y, y_r_c_by_w) * 10 * 0.01
+        G_loss += self.sobel_loss(x, x_r_c_by_y) * 10
+        G_loss += self.sobel_loss(x, x_r_c_by_z) * 10
+        G_loss += self.sobel_loss(x, x_r_c_by_w) * 10
 
-        G_loss += self.sobel_loss(z, z_r_c_by_x) * 10 * 0.01
-        G_loss += self.sobel_loss(z, z_r_c_by_y) * 10 * 0.01
-        G_loss += self.sobel_loss(z, z_r_c_by_w) * 10 * 0.01
+        G_loss += self.sobel_loss(y, y_r_c_by_x) * 10
+        G_loss += self.sobel_loss(y, y_r_c_by_z) * 10
+        G_loss += self.sobel_loss(y, y_r_c_by_w) * 10
 
-        G_loss += self.sobel_loss(w, w_r_c_by_x) * 10 * 0.01
-        G_loss += self.sobel_loss(w, w_r_c_by_y) * 10 * 0.01
-        G_loss += self.sobel_loss(w, w_r_c_by_z) * 10 * 0.01
+        G_loss += self.sobel_loss(z, z_r_c_by_x) * 10
+        G_loss += self.sobel_loss(z, z_r_c_by_y) * 10
+        G_loss += self.sobel_loss(z, z_r_c_by_w) * 10
+
+        G_loss += self.sobel_loss(w, w_r_c_by_x) * 10
+        G_loss += self.sobel_loss(w, w_r_c_by_y) * 10
+        G_loss += self.sobel_loss(w, w_r_c_by_z) * 10
 
         # ssim loss
-        G_loss += self.ssim_loss(x, x_r_c_by_y) * 10 * 0.01
-        G_loss += self.ssim_loss(x, x_r_c_by_z) * 10 * 0.01
-        G_loss += self.ssim_loss(x, x_r_c_by_w) * 10 * 0.01
 
-        G_loss += self.ssim_loss(y, y_r_c_by_x) * 10 * 0.01
-        G_loss += self.ssim_loss(y, y_r_c_by_z) * 10 * 0.01
-        G_loss += self.ssim_loss(y, y_r_c_by_w) * 10 * 0.01
+        G_loss += self.ssim_loss(x, x_r_c_by_y) * 10
+        G_loss += self.ssim_loss(x, x_r_c_by_z) * 10
+        G_loss += self.ssim_loss(x, x_r_c_by_w) * 10
 
-        G_loss += self.ssim_loss(z, z_r_c_by_x) * 10 * 0.01
-        G_loss += self.ssim_loss(z, z_r_c_by_y) * 10 * 0.01
-        G_loss += self.ssim_loss(z, z_r_c_by_w) * 10 * 0.01
+        G_loss += self.ssim_loss(y, y_r_c_by_x) * 10
+        G_loss += self.ssim_loss(y, y_r_c_by_z) * 10
+        G_loss += self.ssim_loss(y, y_r_c_by_w) * 10
 
-        G_loss += self.ssim_loss(w, w_r_c_by_x) * 10 * 0.01
-        G_loss += self.ssim_loss(w, w_r_c_by_y) * 10 * 0.01
-        G_loss += self.ssim_loss(w, w_r_c_by_z) * 10 * 0.01
+        G_loss += self.ssim_loss(z, z_r_c_by_x) * 10
+        G_loss += self.ssim_loss(z, z_r_c_by_y) * 10
+        G_loss += self.ssim_loss(z, z_r_c_by_w) * 10
+
+        G_loss += self.ssim_loss(w, w_r_c_by_x) * 10
+        G_loss += self.ssim_loss(w, w_r_c_by_y) * 10
+        G_loss += self.ssim_loss(w, w_r_c_by_z) * 10
 
         image_list["l_x"] = l_x
         image_list["l_y"] = l_y
@@ -872,7 +884,7 @@ class GAN:
         self.judge_list["j_w_t_by_y"], self.judge_list["j_w_t_c_by_y"] = j_w_t_by_y, j_w_t_c_by_y
         self.judge_list["j_w_t_by_z"], self.judge_list["j_w_t_c_by_z"] = j_w_t_by_z, j_w_t_c_by_z
 
-        loss_list = [G_loss + S_loss, D_loss, S_loss]
+        loss_list = [G_loss, D_loss]
 
         return loss_list, image_list, self.code_list, self.judge_list
 

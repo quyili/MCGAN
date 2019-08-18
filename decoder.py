@@ -9,7 +9,7 @@ class Decoder:
         """
         Args:
           name: string, model name
-          ngf: int, conv output channels
+          ngf: int, number of gen filters in first conv layer
           keep_prob: float, dropout rate
           output_channl: int, equal to class_nums
         """

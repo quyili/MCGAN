@@ -11,10 +11,10 @@ FLAGS = tf.flags.FLAGS
 
 tf.flags.DEFINE_string('savefile', None, 'Checkpoint save dir')
 tf.flags.DEFINE_integer('log_level', 10, 'CRITICAL = 50,ERROR = 40,WARNING = 30,INFO = 20,DEBUG = 10,NOTSET = 0')
-tf.flags.DEFINE_integer('batch_size', 4, 'batch size, default: 1')
-tf.flags.DEFINE_list('image_size', [240, 240, 1], 'image size, default: [155,240,240]')
-tf.flags.DEFINE_float('learning_rate', 1e-4, 'initial learning rate for Adam, default: 2e-4')
-tf.flags.DEFINE_integer('ngf', 64, 'number of gen filters in first conv layer, default: 64')
+tf.flags.DEFINE_integer('batch_size', 4, 'batch size')
+tf.flags.DEFINE_list('image_size', [240, 240, 1], 'image size')
+tf.flags.DEFINE_float('learning_rate', 1e-4, 'initial learning rate for Adam')
+tf.flags.DEFINE_integer('ngf', 64, 'number of gen filters in first conv layer')
 tf.flags.DEFINE_string('X', './BRATS2015/trainT1',
                        'X files for training')
 tf.flags.DEFINE_string('Y', './BRATS2015/trainT2',
@@ -38,17 +38,13 @@ tf.flags.DEFINE_string('L_test', './BRATS2015/testLabel',
 
 tf.flags.DEFINE_string('load_model', None,
                        'folder of saved model that you wish to continue training (e.g. 20170602-1936), default: None')
-tf.flags.DEFINE_string('checkpoint', None, "default: None")
-tf.flags.DEFINE_integer('epoch', 100, 'default: 100')
+tf.flags.DEFINE_string('checkpoint', None, "")
+tf.flags.DEFINE_integer('epoch', 100, '')
 
 tf.flags.DEFINE_string('load_seg_model', None,
                        'folder of saved model that you wish to continue training (e.g. 20170602-1936), default: None')
 tf.flags.DEFINE_string('load_trans_model', None,
                        'folder of saved model that you wish to continue training (e.g. 20170602-1936), default: None')
-
-
-def random(n, h, w, c):
-    return np.random.uniform(0., 1., size=[n, h, w, c])
 
 
 def read_file(l_path, Label_train_files, index):
@@ -70,11 +66,6 @@ def read_files(x_path, l_path, Label_train_files, index):
     return T1_arr_, L_arr_
 
 
-def norm(input):
-    output = (input - np.min(input)) / (np.max(input) - np.min(input))
-    return output
-
-
 def read_filename(path, shuffle=True):
     files = os.listdir(path)
     files_ = np.asarray(files)
@@ -85,6 +76,9 @@ def read_filename(path, shuffle=True):
     return files_
 
 
+"""
+for multi-gpu use, return the average gradients
+"""
 def average_gradients(grads_list):
     average_grads = []
     for grad_and_vars in zip(*grads_list):

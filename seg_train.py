@@ -12,10 +12,10 @@ FLAGS = tf.flags.FLAGS
 
 tf.flags.DEFINE_string('savefile', None, 'Checkpoint save dir')
 tf.flags.DEFINE_integer('log_level', 10, 'CRITICAL = 50,ERROR = 40,WARNING = 30,INFO = 20,DEBUG = 10,NOTSET = 0')
-tf.flags.DEFINE_integer('batch_size', 4, 'batch size, default: 1')
-tf.flags.DEFINE_list('image_size', [240, 240, 1], 'image size, default: [155,240,240]')
-tf.flags.DEFINE_float('learning_rate', 2e-4, 'initial learning rate for Adam, default: 2e-4')
-tf.flags.DEFINE_integer('ngf', 64, 'number of gen filters in first conv layer, default: 64')
+tf.flags.DEFINE_integer('batch_size', 4, 'batch size')
+tf.flags.DEFINE_list('image_size', [240, 240, 1], 'image size')
+tf.flags.DEFINE_float('learning_rate', 2e-4, 'initial learning rate for Adam')
+tf.flags.DEFINE_integer('ngf', 64, 'number of gen filters in first conv layer')
 tf.flags.DEFINE_string('X', './BRATS2015/trainT1',
                        'X files for training')
 tf.flags.DEFINE_string('Y', './BRATS2015/trainT2',
@@ -42,10 +42,6 @@ tf.flags.DEFINE_string('checkpoint', None, "default: None")
 tf.flags.DEFINE_integer('epoch', 100, 'default: 100')
 
 
-def random(n, h, w, c):
-    return np.random.uniform(0., 1., size=[n, h, w, c])
-
-
 def read_file(l_path, Label_train_files, index):
     train_range = len(Label_train_files)
     L_img = SimpleITK.ReadImage(l_path + "/" + Label_train_files[index % train_range])
@@ -62,14 +58,7 @@ def read_files(x_path, l_path, Label_train_files, index):
     L_arr_ = SimpleITK.GetArrayFromImage(L_img)
     T1_arr_ = T1_arr_.astype('float32')
     L_arr_ = L_arr_.astype('float32')
-    # T1_arr_ = norm(T1_arr_)
     return T1_arr_, L_arr_
-
-
-def norm(input):
-    output = (input - np.min(input, axis=[1, 2, 3])
-              ) / (np.max(input, axis=[1, 2, 3]) - np.min(input, axis=[1, 2, 3]))
-    return output
 
 
 def read_filename(path, shuffle=True):
@@ -82,6 +71,9 @@ def read_filename(path, shuffle=True):
     return files_
 
 
+"""
+for multi-gpu use, return the average gradients
+"""
 def average_gradients(grads_list):
     average_grads = []
     for grad_and_vars in zip(*grads_list):

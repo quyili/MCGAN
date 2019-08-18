@@ -14,7 +14,6 @@ class GAN:
                  ):
         """
         Args:
-          input_size：list [H, W, C]
           batch_size: integer, batch size
           learning_rate: float, initial learning rate for Adam
           ngf: number of gen filters in first conv layer
@@ -22,14 +21,22 @@ class GAN:
         self.learning_rate = learning_rate
         self.input_shape = [int(batch_size / 4), image_size[0], image_size[1], image_size[2]]
         self.ones = tf.ones(self.input_shape, name="ones")
+        # segment model result : label probability dict
         self.prob_list = {}
+        # encoder result dict
         self.code_list = {}
+        # Discriminator result dict
         self.judge_list = {}
         self.tensor_name = {}
+
 
         self.EC_L = Encoder('EC_L', ngf=ngf)
         self.DC_L = Decoder('DC_L', ngf=ngf, output_channl=5)
 
+    """
+    Get input image x segmentation result, and turn to ont hot vector
+    then normalize 
+    """
     def segmentation(self, x):
         l_prob = self.DC_L(self.EC_L(x))
         l_f = tf.reshape(tf.cast(tf.argmax(l_prob, axis=-1), dtype=tf.float32) * 0.25, shape=self.input_shape)

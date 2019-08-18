@@ -8,7 +8,7 @@ class Discriminator:
         """
         Args:
           name: string, model name
-          ngf: int, conv output channels
+          ngf: int, number of gen filters in first conv layer
           keep_prob: float, dropout rate
         """
         self.name = name
@@ -19,10 +19,11 @@ class Discriminator:
     def __call__(self, D_input):
         """
         Args:
-          input: batch_size x image_size x image_size x 3
+          input: batch_size x image_size x image_size x N
         Returns:
-          output: 4D tensor batch_size x out_size x out_size x 1 (default 1x5x5x1)
-                  filled with 0.9 if real, 0.0 if fake
+          output_1: 4D tensor batch_size x out_size x out_size x 1
+                  filled with 1.0 if real, 0.0 if fake
+          output_2: 4D tensor classifier result
         """
 
         with tf.variable_scope(self.name, reuse=self.reuse):

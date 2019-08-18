@@ -9,7 +9,7 @@ class Encoder:
         """
         Args:
           name: string, model name
-          ngf: int, conv output channels
+          ngf: int, number of gen filters in first conv layer
           keep_prob: float, dropout rate
         """
         self.name = name
@@ -20,9 +20,9 @@ class Encoder:
     def __call__(self, EC_input):
         """
         Args:
-          input: batch_size x width x height x 3
+          input: batch_size x width x height x N
         Returns:
-          output: same size as input
+          output: batch_size x out_size x out_size x (8 * ngf)
         """
 
         with tf.variable_scope(self.name, reuse=self.reuse):
